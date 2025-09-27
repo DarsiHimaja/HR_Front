@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import api from "../utils/api";
+import Profile from "./Profile";
+import { Link } from "react-router-dom";
 
 export default function PostDetail() {
   const { postId } = useParams();
@@ -9,6 +11,7 @@ export default function PostDetail() {
 
   const [post, setPost] = useState(null);
   const [apps, setApps] = useState([]);
+  const [profileModal, setProfileModal] = useState({ visible: false, user: null });
   const [loading, setLoading] = useState(true);
   const [matched, setMatched] = useState(null);
   const [topApplicants, setTopApplicants] = useState([]);
@@ -18,9 +21,13 @@ export default function PostDetail() {
   const [notification, setNotification] = useState(null);
   const [tieLinks, setTieLinks] = useState({});
   const [scheduleModal, setScheduleModal] = useState({ visible: false, applicant: null, datetime: "" });
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [scheduleDate, setScheduleDate] = useState("");
   const [matchOption, setMatchOption] = useState("20%");
   const [emailPreview, setEmailPreview] = useState(null);
   const [sendingEmails, setSendingEmails] = useState(false);
+  const [emailModal, setEmailModal] = useState({ visible: false, content: "", applicant: null });
 
   const API_BASE = "https://backend2-1-labd.onrender.com";
 
@@ -29,13 +36,8 @@ export default function PostDetail() {
       try {
         const r1 = await api.get(`/posts/${postId}`);
         setPost(r1.data);
-
         const r2 = await api.get(`/departments/${deptId}/posts/${postId}/applicants`);
         setApps(r2.data);
-
-        // Separate selected and rejected applicants
-        setSelectedApplicants(r2.data.filter(a => a.status === "selected"));
-        setRejectedApplicants(r2.data.filter(a => a.status === "rejected"));
       } catch (err) {
         console.error(err);
         alert("Failed to load post or applicants");
@@ -50,6 +52,7 @@ export default function PostDetail() {
     try {
       const r = await api.post(`/posts/${postId}/match`, { mode: option });
       let top = r.data?.matched_top ?? [];
+
       if (top.length === 0) {
         top = [...apps].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
       }
@@ -73,6 +76,7 @@ export default function PostDetail() {
   async function sendEmails() {
     try {
       setSendingEmails(true);
+
       let method, value;
       if (matchOption === "positions") {
         method = "positions";
@@ -120,47 +124,39 @@ export default function PostDetail() {
     }
   }
 
-  // ---------------- Updated Select/Reject Functions ----------------
-  async function selectApplicant(app) {
+  async function selectApplicant(appId) {
     try {
       const res = await fetch(`${API_BASE}/posts/${postId}/select`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ applicant_id: app.id || app.applicant_id })
+        body: JSON.stringify({ applicant_id: appId })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to select candidate");
-
       alert(`Candidate ${data.candidate.name} selected!`);
-      setSelectedApplicants(prev => [...prev, data.candidate]);
-      setRejectedApplicants(prev => prev.filter(a => a.id !== data.candidate.id));
-      setApps(prev => prev.filter(a => a.id !== data.candidate.id));
+      reloadApplicants();
     } catch (err) {
       console.error(err);
       alert(err.message);
     }
   }
 
-  async function rejectApplicant(app) {
+  async function rejectApplicant(appId) {
     try {
       const res = await fetch(`${API_BASE}/posts/${postId}/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ applicant_id: app.id || app.applicant_id })
+        body: JSON.stringify({ applicant_id: appId })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "Failed to reject candidate");
-
       alert(`Candidate ${data.candidate.name} rejected!`);
-      setRejectedApplicants(prev => [...prev, data.candidate]);
-      setSelectedApplicants(prev => prev.filter(a => a.id !== data.candidate.id));
-      setApps(prev => prev.filter(a => a.id !== data.candidate.id));
+      reloadApplicants();
     } catch (err) {
       console.error(err);
       alert(err.message);
     }
   }
-  // -------------------------------------------------------------------
 
   async function reloadApplicants() {
     const r = await api.get(`/departments/${deptId}/posts/${postId}/applicants`);
@@ -292,8 +288,8 @@ export default function PostDetail() {
                   <td className="px-3 py-2 border font-medium text-teal-700 dark:text-teal-300">{a.score ?? "N/A"}</td>
                   <td className="px-3 py-2 border">{a.status || "Pending"}</td>
                   <td className="px-3 py-2 border flex flex-wrap gap-1">
-                    <button onClick={() => selectApplicant(a)} className="px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition">Select</button>
-                    <button onClick={() => rejectApplicant(a)} className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition">Reject</button>
+                    <button onClick={() => selectApplicant(a.id || a.applicant_id)} className="px-2 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 transition">Select</button>
+                    <button onClick={() => rejectApplicant(a.id || a.applicant_id)} className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition">Reject</button>
                     <button onClick={() => setScheduleModal({ visible: true, applicant: a, datetime: "" })} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Schedule Interview</button>
                   </td>
                 </tr>
@@ -317,11 +313,11 @@ export default function PostDetail() {
               {a.status === "rejected" && <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-700 rounded">Rejected</span>}
             </div>
             <div className="flex flex-col gap-2">
-              <Link to={`/profile/${a.id}`} target="_blank" className="px-3 py-1 text-sm border rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition">View Profile</Link>
+              <Link to={`/profile/${a.id}`} target="_blank" rel="noopener" className="px-3 py-1 text-sm border rounded hover:bg-gray-50 dark:hover:bg-gray-700 transition">View Profile</Link>
               {a.status !== "selected" && a.status !== "rejected" && (
                 <>
-                  <button onClick={() => selectApplicant(a)} className="px-3 py-1 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 transition">Select</button>
-                  <button onClick={() => rejectApplicant(a)} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition">Reject</button>
+                  <button onClick={() => selectApplicant(a.id || a.applicantId)} className="px-3 py-1 text-sm bg-teal-600 text-white rounded hover:bg-teal-700 transition">Select</button>
+                  <button onClick={() => rejectApplicant(a.id || a.applicantId)} className="px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition">Reject</button>
                 </>
               )}
               <button onClick={() => setScheduleModal({ visible: true, applicant: a, datetime: "" })} className="px-3 py-1 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Schedule Interview</button>
@@ -330,35 +326,32 @@ export default function PostDetail() {
         ))}
       </div>
 
-      {/* Selected Tab */}
-      {selectedApplicants.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold">Selected Applicants</h2>
-          {selectedApplicants.map(a => (
-            <div key={a.id || a.applicant_id}>{a.name} - {a.email}</div>
-          ))}
-        </div>
-      )}
-
-      {/* Rejected Tab */}
-      {rejectedApplicants.length > 0 && (
-        <div className="mt-8">
-          <h2 className="text-xl font-semibold">Rejected Applicants</h2>
-          {rejectedApplicants.map(a => (
-            <div key={a.id || a.applicant_id}>{a.name} - {a.email}</div>
-          ))}
-        </div>
-      )}
-
       {/* Schedule Modal */}
       {scheduleModal.visible && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-4">Schedule Interview for {scheduleModal.applicant.name}</h3>
-            <input type="datetime-local" value={scheduleModal.datetime} onChange={(e) => setScheduleModal(prev => ({ ...prev, datetime: e.target.value }))} className="w-full mb-4 p-2 border rounded" />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setScheduleModal({ visible: false, applicant: null, datetime: "" })} className="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700">Cancel</button>
-              <button onClick={() => { scheduleInterview(scheduleModal.applicant, scheduleModal.datetime); setScheduleModal({ visible: false, applicant: null, datetime: "" }); }} className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">Schedule</button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[90%] max-w-md shadow-lg relative text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold mb-4">Schedule Interview - {scheduleModal.applicant.name}</h3>
+            <label className="block mb-2 text-sm font-medium">Select Date & Time</label>
+            <input
+              type="datetime-local"
+              value={scheduleModal.datetime}
+              onChange={(e) => setScheduleModal({ ...scheduleModal, datetime: e.target.value })}
+              className="w-full border px-3 py-2 rounded mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+            />
+
+            <h4 className="font-semibold mb-2">Email Preview:</h4>
+            <div className="bg-gray-50 dark:bg-gray-700 p-3 rounded mb-4 text-sm whitespace-pre-line">
+              {`Subject: Interview Invitation for ${post.title}\n\nHello ${scheduleModal.applicant.name},\n\nYou have been shortlisted for the ${post.title} position.\nInterview Date & Time: ${scheduleModal.datetime || "[Select Date & Time]"}\n\nRegards,\n${post.company_name || "HR"}`}
+            </div>
+
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setScheduleModal({ visible: false, applicant: null, datetime: "" })} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Close</button>
+              <button
+                onClick={() => { alert(`Email sent to ${scheduleModal.applicant.name}`); setScheduleModal({ visible: false, applicant: null, datetime: "" }); }}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Send Email
+              </button>
             </div>
           </div>
         </div>
@@ -366,12 +359,29 @@ export default function PostDetail() {
 
       {/* Email Preview Modal */}
       {emailPreview && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-xl w-full max-w-2xl">
-            <h3 className="text-lg font-semibold mb-4">Email Preview</h3>
-            <pre className="bg-gray-100 dark:bg-gray-700 p-4 rounded h-96 overflow-y-auto">{emailPreview.content}</pre>
-            <div className="flex justify-end mt-4">
-              <button onClick={() => setEmailPreview(null)} className="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">Close</button>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[90%] max-w-2xl shadow-lg relative text-gray-900 dark:text-gray-100">
+            <h3 className="text-lg font-semibold mb-4">Send Email</h3>
+            <div className="mt-4 flex justify-end gap-3">
+              <button onClick={() => setEmailPreview(null)} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded hover:bg-gray-300 dark:hover:bg-gray-600">Close</button>
+              <button
+                onClick={async () => {
+                  try {
+                    const method = matchOption === "positions" ? "positions" : "top_percent";
+                    const value = matchOption === "positions" ? post.positions : parseInt(matchOption.replace("%", ""));
+                    const url = `/posts/${postId}/send_top_emails?method=${method}&value=${value}`;
+                    await api.post(url);
+                    alert(`Emails sent successfully to applicants`);
+                    setEmailPreview(null);
+                  } catch (err) {
+                    console.error(err);
+                    alert("Failed to send emails: " + (err?.response?.data?.detail || err.message));
+                  }
+                }}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Send Emails
+              </button>
             </div>
           </div>
         </div>
