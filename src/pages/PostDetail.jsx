@@ -22,7 +22,7 @@ export default function PostDetail() {
   const [emailPreview, setEmailPreview] = useState(null);
   const [sendingEmails, setSendingEmails] = useState(false);
 
-  const API_BASE = "http://localhost:8000";
+  const API_URL = "https://backend2-1-labd.onrender.com";
 
   useEffect(() => {
     async function load() {
