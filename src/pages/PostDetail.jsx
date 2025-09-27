@@ -22,7 +22,7 @@ export default function PostDetail() {
   const [emailPreview, setEmailPreview] = useState(null);
   const [sendingEmails, setSendingEmails] = useState(false);
 
-  const API_URL = "https://backend2-1-labd.onrender.com";
+  const API_BASE = "https://backend2-1-labd.onrender.com";
 
   useEffect(() => {
     async function load() {
@@ -379,4 +379,3 @@ export default function PostDetail() {
     </div>
   );
 }
-
