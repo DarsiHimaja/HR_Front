@@ -1,0 +1,23 @@
+/* src/styles/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* global overrides */
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: #f8fafc; /* Tailwind's slate-50 */
+  color: #1e293b; /* Tailwind's slate-800 for better contrast */
+  line-height: 1.6;
+}
+
+/* smoother font rendering */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* optional: unify card look */
+.card {
+  @apply bg-white shadow rounded-xl p-4;
+}
